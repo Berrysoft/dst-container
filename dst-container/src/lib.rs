@@ -19,6 +19,9 @@ pub use unsized_slice::UnsizedSlice;
 mod unsized_str;
 pub use unsized_str::UnsizedStr;
 
+mod fixed_vec;
+pub use fixed_vec::FixedVec;
+
 /// A DST with maybe-uninit project defined.
 pub trait MaybeUninitProject {
     /// The maybe-uninit project type.
