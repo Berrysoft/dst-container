@@ -26,6 +26,10 @@ pub trait MaybeUninitProject {
     type Target: ?Sized + Pointee<Metadata = <Self as Pointee>::Metadata>;
 }
 
+impl<T: Sized> MaybeUninitProject for T {
+    type Target = MaybeUninit<T>;
+}
+
 impl<T> MaybeUninitProject for [T] {
     type Target = [MaybeUninit<T>];
 }
@@ -204,6 +208,12 @@ unsafe fn zeroed_with_metadata<T: ?Sized + MaybeUninitProject>(
 #[cfg(test)]
 mod test {
     use crate::*;
+
+    #[test]
+    fn sized() {
+        let s: Box<u32> = unsafe { Box::<u32>::new_zeroed_unsized(()).assume_init_unsized() };
+        assert_eq!(s.as_ref(), &0);
+    }
 
     #[derive(MaybeUninitProject)]
     #[repr(transparent)]
