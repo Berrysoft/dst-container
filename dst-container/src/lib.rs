@@ -198,3 +198,21 @@ unsafe fn zeroed_with_metadata<T: ?Sized + MaybeUninitProject>(
 ) -> *mut T::Target {
     alloc_with_metadata_impl::<T>(metadata, |layout| Global.allocate_zeroed(layout))
 }
+
+#[cfg(test)]
+mod test {
+    use dst_container_derive::MaybeUninitProject;
+
+    use crate::{AssumeInit, NewUninit};
+
+    #[derive(MaybeUninitProject)]
+    #[repr(transparent)]
+    struct SliceWrapper([u8]);
+
+    #[test]
+    fn slice_wrapper() {
+        let s: Box<SliceWrapper> =
+            unsafe { Box::<SliceWrapper>::new_zeroed_unsized(64).assume_init_unsized() };
+        assert_eq!(&s.0, &[0u8; 64]);
+    }
+}
