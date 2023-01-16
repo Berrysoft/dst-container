@@ -1,5 +1,4 @@
 use crate::*;
-use dst_container_derive::MaybeUninitProject;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, MaybeUninitProject)]
 #[repr(C)]

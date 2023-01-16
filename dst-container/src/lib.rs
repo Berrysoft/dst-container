@@ -14,6 +14,8 @@ use std::{
     sync::Arc,
 };
 
+pub use dst_container_derive::MaybeUninitProject;
+
 mod unsized_slice;
 pub use unsized_slice::UnsizedSlice;
 
@@ -201,9 +203,7 @@ unsafe fn zeroed_with_metadata<T: ?Sized + MaybeUninitProject>(
 
 #[cfg(test)]
 mod test {
-    use dst_container_derive::MaybeUninitProject;
-
-    use crate::{AssumeInit, NewUninit};
+    use crate::*;
 
     #[derive(MaybeUninitProject)]
     #[repr(transparent)]
@@ -213,6 +213,14 @@ mod test {
     fn slice_wrapper() {
         let s: Box<SliceWrapper> =
             unsafe { Box::<SliceWrapper>::new_zeroed_unsized(64).assume_init_unsized() };
+        assert_eq!(&s.0, &[0u8; 64]);
+
+        let s: Rc<SliceWrapper> =
+            unsafe { Rc::<SliceWrapper>::new_zeroed_unsized(64).assume_init_unsized() };
+        assert_eq!(&s.0, &[0u8; 64]);
+
+        let s: Arc<SliceWrapper> =
+            unsafe { Arc::<SliceWrapper>::new_zeroed_unsized(64).assume_init_unsized() };
         assert_eq!(&s.0, &[0u8; 64]);
     }
 }
