@@ -1,7 +1,10 @@
+//! This is a crate providing functionalities creating DST instances.
+
 #![feature(allocator_api)]
 #![feature(layout_for_ptr)]
 #![cfg_attr(test, feature(maybe_uninit_write_slice))]
 #![feature(ptr_metadata)]
+#![warn(missing_docs)]
 
 use std::{
     alloc::{handle_alloc_error, AllocError, Allocator, Global, Layout},
@@ -11,7 +14,10 @@ use std::{
     sync::Arc,
 };
 
+/// A DST with maybe-uninit project defined.
 pub trait MaybeUninitProject {
+    /// The maybe-uninit project type.
+    /// [`MaybeUninit`] can only deal with [`Sized`] types.
     type Target: ?Sized + Pointee<Metadata = <Self as Pointee>::Metadata>;
 }
 
@@ -19,13 +25,22 @@ impl<T> MaybeUninitProject for [T] {
     type Target = [MaybeUninit<T>];
 }
 
+/// An abstract of smart pointers.
 pub trait SmartPtr: Sized {
+    /// The inner type of the pointer.
     type Content: ?Sized;
 
+    /// Rebind the smart pointer to another content type.
     type Rebind<U: ?Sized>: SmartPtr<Content = U>;
 
+    /// Create the smart pointer from pointer allocated from [`Global`].
+    /// # Safety
+    /// See `Box::from_raw`.
     unsafe fn from_alloc(p: *mut Self::Content) -> Self;
 
+    /// Convert the smart pointer to another content type one.
+    /// # Safety
+    /// See [`std::mem::transmute`].
     unsafe fn rebind<U: ?Sized>(self) -> Self::Rebind<U>
     where
         U: Pointee<Metadata = <Self::Content as Pointee>::Metadata>;
@@ -87,15 +102,28 @@ impl<T: ?Sized> SmartPtr for Arc<T> {
 
 type RebindPtr<P, U> = <P as SmartPtr>::Rebind<U>;
 
-pub trait NewUninit<T: ?Sized + MaybeUninitProject>: SmartPtr<Content = T> {
+mod sealed {
+    pub trait Sealed {}
+}
+
+use sealed::Sealed;
+impl<P: SmartPtr> Sealed for P {}
+
+/// Provide functions for smart pointers to create DST instances on heap.
+pub trait NewUninit<T: ?Sized + MaybeUninitProject>: Sealed + SmartPtr<Content = T> {
+    /// Create maybe-uninit DST.
     fn new_uninit_unsized(metadata: <T as Pointee>::Metadata) -> RebindPtr<Self, T::Target> {
         unsafe { RebindPtr::<Self, T::Target>::from_alloc(alloc_with_metadata::<T>(metadata)) }
     }
 
+    /// Create maybe-uninit zero-initialized DST.
     fn new_zeroed_unsized(metadata: <T as Pointee>::Metadata) -> RebindPtr<Self, T::Target> {
         unsafe { RebindPtr::<Self, T::Target>::from_alloc(zeroed_with_metadata::<T>(metadata)) }
     }
 
+    /// Create DST and initialize the instance with user-provided function.
+    /// # Safety
+    /// The caller should ensure all fields are properly initialized.
     unsafe fn new_unsized_with(
         metadata: <T as Pointee>::Metadata,
         f: impl FnOnce(&mut T::Target),
@@ -108,24 +136,17 @@ pub trait NewUninit<T: ?Sized + MaybeUninitProject>: SmartPtr<Content = T> {
         f(&mut *ptr);
         RebindPtr::<Self, T::Target>::from_alloc(ptr).rebind::<T>()
     }
-
-    unsafe fn new_zeroed_with(
-        metadata: <T as Pointee>::Metadata,
-        f: impl FnOnce(&mut T::Target),
-    ) -> Self
-    // To make compiler happy.
-    where
-        Self::Rebind<T::Target>: SmartPtr<Rebind<T> = Self>,
-    {
-        let ptr = zeroed_with_metadata::<T>(metadata);
-        f(&mut *ptr);
-        RebindPtr::<Self, T::Target>::from_alloc(ptr).rebind::<T>()
-    }
 }
 
 impl<T: ?Sized + MaybeUninitProject, P: SmartPtr<Content = T>> NewUninit<T> for P {}
 
-pub trait AssumeInit<T: ?Sized + MaybeUninitProject>: SmartPtr<Content = T::Target> {
+/// Provide `assume_init` for smart pointers of maybe-uninit project types.
+pub trait AssumeInit<T: ?Sized + MaybeUninitProject>:
+    Sealed + SmartPtr<Content = T::Target>
+{
+    /// Converts to initialized smart pointer.
+    /// # Safety
+    /// See `MaybeUninit::assume_init`.
     unsafe fn assume_init(self) -> RebindPtr<Self, T> {
         self.rebind()
     }
