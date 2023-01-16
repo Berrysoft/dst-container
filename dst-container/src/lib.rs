@@ -2,7 +2,7 @@
 
 #![feature(allocator_api)]
 #![feature(layout_for_ptr)]
-#![cfg_attr(test, feature(maybe_uninit_write_slice))]
+#![feature(maybe_uninit_write_slice)]
 #![feature(ptr_metadata)]
 #![warn(missing_docs)]
 
@@ -13,6 +13,9 @@ use std::{
     rc::Rc,
     sync::Arc,
 };
+
+mod unsized_slice;
+pub use unsized_slice::UnsizedSlice;
 
 /// A DST with maybe-uninit project defined.
 pub trait MaybeUninitProject {
@@ -110,35 +113,52 @@ use sealed::Sealed;
 impl<P: SmartPtr> Sealed for P {}
 
 /// Provide functions for smart pointers to create DST instances on heap.
-pub trait NewUninit<T: ?Sized + MaybeUninitProject>: Sealed + SmartPtr<Content = T> {
+pub trait NewUninit: Sealed + SmartPtr
+where
+    Self::Content: MaybeUninitProject,
+{
     /// Create maybe-uninit DST.
-    fn new_uninit_unsized(metadata: <T as Pointee>::Metadata) -> RebindPtr<Self, T::Target> {
-        unsafe { RebindPtr::<Self, T::Target>::from_alloc(alloc_with_metadata::<T>(metadata)) }
+    fn new_uninit_unsized(
+        metadata: <Self::Content as Pointee>::Metadata,
+    ) -> RebindPtr<Self, <Self::Content as MaybeUninitProject>::Target> {
+        unsafe {
+            RebindPtr::<Self, <Self::Content as MaybeUninitProject>::Target>::from_alloc(
+                alloc_with_metadata::<Self::Content>(metadata),
+            )
+        }
     }
 
     /// Create maybe-uninit zero-initialized DST.
-    fn new_zeroed_unsized(metadata: <T as Pointee>::Metadata) -> RebindPtr<Self, T::Target> {
-        unsafe { RebindPtr::<Self, T::Target>::from_alloc(zeroed_with_metadata::<T>(metadata)) }
+    fn new_zeroed_unsized(
+        metadata: <Self::Content as Pointee>::Metadata,
+    ) -> RebindPtr<Self, <Self::Content as MaybeUninitProject>::Target> {
+        unsafe {
+            RebindPtr::<Self, <Self::Content as MaybeUninitProject>::Target>::from_alloc(
+                zeroed_with_metadata::<Self::Content>(metadata),
+            )
+        }
     }
 
     /// Create DST and initialize the instance with user-provided function.
     /// # Safety
     /// The caller should ensure all fields are properly initialized.
     unsafe fn new_unsized_with(
-        metadata: <T as Pointee>::Metadata,
-        f: impl FnOnce(&mut T::Target),
+        metadata: <Self::Content as Pointee>::Metadata,
+        f: impl FnOnce(&mut <Self::Content as MaybeUninitProject>::Target),
     ) -> Self
     // To make compiler happy.
     where
-        Self::Rebind<T::Target>: SmartPtr<Rebind<T> = Self>,
+        Self::Rebind<<Self::Content as MaybeUninitProject>::Target>:
+            SmartPtr<Rebind<Self::Content> = Self>,
     {
-        let ptr = alloc_with_metadata::<T>(metadata);
+        let ptr = alloc_with_metadata::<Self::Content>(metadata);
         f(&mut *ptr);
-        RebindPtr::<Self, T::Target>::from_alloc(ptr).rebind::<T>()
+        RebindPtr::<Self, <Self::Content as MaybeUninitProject>::Target>::from_alloc(ptr)
+            .rebind::<Self::Content>()
     }
 }
 
-impl<T: ?Sized + MaybeUninitProject, P: SmartPtr<Content = T>> NewUninit<T> for P {}
+impl<P: SmartPtr> NewUninit for P where P::Content: MaybeUninitProject {}
 
 /// Provide `assume_init` for smart pointers of maybe-uninit project types.
 pub trait AssumeInit<T: ?Sized + MaybeUninitProject>:
@@ -147,7 +167,7 @@ pub trait AssumeInit<T: ?Sized + MaybeUninitProject>:
     /// Converts to initialized smart pointer.
     /// # Safety
     /// See `MaybeUninit::assume_init`.
-    unsafe fn assume_init(self) -> RebindPtr<Self, T> {
+    unsafe fn assume_init_unsized(self) -> RebindPtr<Self, T> {
         self.rebind()
     }
 }
@@ -177,69 +197,4 @@ unsafe fn zeroed_with_metadata<T: ?Sized + MaybeUninitProject>(
     metadata: <T as Pointee>::Metadata,
 ) -> *mut T::Target {
     alloc_with_metadata_impl::<T>(metadata, |layout| Global.allocate_zeroed(layout))
-}
-
-#[cfg(test)]
-mod test {
-    use crate::*;
-    use std::sync::Arc;
-
-    #[repr(C)]
-    struct UnsizedSlice<H, T> {
-        pub header: H,
-        pub slice: [T],
-    }
-
-    #[repr(C)]
-    struct MaybeUninitUnsizedSlice<H, T> {
-        pub header: MaybeUninit<H>,
-        pub slice: [MaybeUninit<T>],
-    }
-
-    impl<H, T> MaybeUninitProject for UnsizedSlice<H, T> {
-        type Target = MaybeUninitUnsizedSlice<H, T>;
-    }
-
-    impl<H: Clone, T: Clone> Clone for Box<UnsizedSlice<H, T>> {
-        fn clone(&self) -> Self {
-            unsafe {
-                Self::new_unsized_with(self.slice.len(), |slice| {
-                    slice.header.write(self.header.clone());
-                    MaybeUninit::write_slice_cloned(&mut slice.slice, &self.slice);
-                })
-            }
-        }
-    }
-
-    #[test]
-    fn new_box() {
-        let b = unsafe {
-            Box::<UnsizedSlice<_, _>>::new_unsized_with(6, |slice| {
-                slice.header.write(114514u32);
-                MaybeUninit::write_slice(&mut slice.slice, &[1u64, 1, 4, 5, 1, 4]);
-            })
-        };
-        assert_eq!(b.header, 114514);
-        assert_eq!(b.slice, [1, 1, 4, 5, 1, 4]);
-    }
-
-    #[test]
-    fn untrivial_drop() {
-        let data = Arc::new(());
-
-        let b = unsafe {
-            Box::<UnsizedSlice<_, _>>::new_unsized_with(2, |slice| {
-                slice.header.write(data.clone());
-                MaybeUninit::write_slice_cloned(&mut slice.slice, &[data.clone(), data.clone()]);
-            })
-        };
-        assert_eq!(Arc::strong_count(&data), 4);
-
-        let b_clone = b.clone();
-        assert_eq!(Arc::strong_count(&data), 7);
-
-        drop(b_clone);
-        drop(b);
-        assert_eq!(Arc::strong_count(&data), 1);
-    }
 }

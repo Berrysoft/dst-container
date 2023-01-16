@@ -1,4 +1,5 @@
 [workspace]
 members = [
     "dst-container",
+    "dst-container-derive",
 ]
