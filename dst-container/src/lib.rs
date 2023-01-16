@@ -19,6 +19,9 @@ pub use dst_container_derive::MaybeUninitProject;
 mod unsized_slice;
 pub use unsized_slice::UnsizedSlice;
 
+mod unsized_str;
+pub use unsized_str::UnsizedStr;
+
 /// A DST with maybe-uninit project defined.
 pub trait MaybeUninitProject {
     /// The maybe-uninit project type.
@@ -32,6 +35,10 @@ impl<T: Sized> MaybeUninitProject for T {
 
 impl<T> MaybeUninitProject for [T] {
     type Target = [MaybeUninit<T>];
+}
+
+impl MaybeUninitProject for str {
+    type Target = [MaybeUninit<u8>];
 }
 
 /// An abstract of smart pointers.
