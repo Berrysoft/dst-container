@@ -1020,38 +1020,11 @@ impl<T: ?Sized> Extend<Box<T>> for FixedVec<T> {
 
 impl<T: ?Sized + UnsizedClone> Clone for FixedVec<T> {
     fn clone(&self) -> Self {
-        struct DropGuard<'a, T: ?Sized> {
-            vec: &'a mut FixedVec<T>,
-            num_init: usize,
-        }
-        impl<'a, T: ?Sized> Drop for DropGuard<'a, T> {
-            #[inline]
-            fn drop(&mut self) {
-                // SAFETY:
-                // items were marked initialized in the loop below
-                unsafe {
-                    self.vec.set_len(self.num_init);
-                }
-            }
-        }
         let mut vec = FixedVec::<T>::with_capacity(self.metadata(), self.len());
-        let mut guard = DropGuard {
-            vec: &mut vec,
-            num_init: 0,
-        };
-        for (i, b) in self.iter().enumerate() {
-            guard.num_init = i;
-            b.clone_to(unsafe {
-                let ptr = guard.vec.raw_mut(i) as *mut T;
-                let (ptr, metadata) = ptr.to_raw_parts();
-                &mut *std::ptr::from_raw_parts_mut(ptr, metadata)
-            });
-        }
-        forget(guard);
-        // SAFETY:
-        // the vec was allocated and initialized above to at least this length.
-        unsafe {
-            vec.set_len(self.len());
+        for item in self {
+            unsafe {
+                vec.push_with(|dest| item.clone_to(dest));
+            }
         }
         vec
     }
