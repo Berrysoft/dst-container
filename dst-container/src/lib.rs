@@ -54,6 +54,18 @@ impl MaybeUninitProject for str {
 pub trait UnsizedClone: MaybeUninitProject {
     /// Clone the current type to maybe-uninit target.
     fn clone_to(&self, dest: &mut Self::Target);
+
+    /// Returns a boxed copy of the boxed value.
+    ///
+    /// Only apply to [`Box`] because [`Rc`] and [`Arc`] have own clone impl.
+    ///
+    /// [`Rc`]: std::rc::Rc
+    /// [`Arc`]: std::sync::Arc
+    #[allow(clippy::borrowed_box)]
+    fn clone(self: &Box<Self>) -> Box<Self> {
+        let (_, metadata) = (self.as_ref() as *const Self).to_raw_parts();
+        unsafe { Box::<Self>::new_unsized_with(metadata, |dest| self.as_ref().clone_to(dest)) }
+    }
 }
 
 impl<T: Clone> UnsizedClone for T {

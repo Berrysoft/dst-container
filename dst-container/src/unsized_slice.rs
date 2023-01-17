@@ -12,7 +12,7 @@ pub struct UnsizedSlice<H, T> {
 
 #[cfg(test)]
 mod test {
-    use crate::{smart_ptr::UnsizedBoxClone, *};
+    use crate::*;
     use std::sync::Arc;
 
     #[test]
@@ -47,7 +47,7 @@ mod test {
         };
         assert_eq!(Arc::strong_count(&data), 4);
 
-        let b_clone = b.clone_unsized();
+        let b_clone = b.clone();
         assert_eq!(Arc::strong_count(&data), 7);
 
         drop(b_clone);

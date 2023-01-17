@@ -177,20 +177,6 @@ pub trait AssumeInit<T: ?Sized + MaybeUninitProject>:
 
 impl<T: ?Sized + MaybeUninitProject, P: SmartPtr<Content = T::Target>> AssumeInit<T> for P {}
 
-pub trait UnsizedBoxClone: Sealed + SmartPtr
-where
-    Self::Content: UnsizedClone,
-{
-    fn clone_unsized(&self) -> Self;
-}
-
-impl<T: ?Sized + UnsizedClone> UnsizedBoxClone for Box<T> {
-    fn clone_unsized(&self) -> Self {
-        let (_, metadata) = (self.as_ref() as *const T).to_raw_parts();
-        unsafe { Self::new_unsized_with(metadata, |dest| self.as_ref().clone_to(dest)) }
-    }
-}
-
 #[cfg(test)]
 mod test {
     use crate::*;
