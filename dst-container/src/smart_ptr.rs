@@ -138,20 +138,6 @@ where
 
 impl<P: SmartPtr> NewUninit for P where P::Content: MaybeUninitProject {}
 
-/// Provide `assume_init` for smart pointers of maybe-uninit project types.
-pub trait AssumeInit<T: ?Sized + MaybeUninitProject>:
-    Sealed + SmartPtr<Content = T::Target>
-{
-    /// Converts to initialized smart pointer.
-    /// # Safety
-    /// See `MaybeUninit::assume_init`.
-    unsafe fn assume_init_unsized(self) -> RebindPtr<Self, T> {
-        self.rebind()
-    }
-}
-
-impl<T: ?Sized + MaybeUninitProject, P: SmartPtr<Content = T::Target>> AssumeInit<T> for P {}
-
 unsafe fn alloc_with_metadata_impl<T: ?Sized + MaybeUninitProject>(
     metadata: <T as Pointee>::Metadata,
     alloc: impl FnOnce(Layout) -> Result<NonNull<[u8]>, AllocError>,
@@ -175,6 +161,34 @@ unsafe fn zeroed_with_metadata<T: ?Sized + MaybeUninitProject>(
     metadata: <T as Pointee>::Metadata,
 ) -> *mut T::Target {
     alloc_with_metadata_impl::<T>(metadata, |layout| Global.allocate_zeroed(layout))
+}
+
+/// Provide `assume_init` for smart pointers of maybe-uninit project types.
+pub trait AssumeInit<T: ?Sized + MaybeUninitProject>:
+    Sealed + SmartPtr<Content = T::Target>
+{
+    /// Converts to initialized smart pointer.
+    /// # Safety
+    /// See `MaybeUninit::assume_init`.
+    unsafe fn assume_init_unsized(self) -> RebindPtr<Self, T> {
+        self.rebind()
+    }
+}
+
+impl<T: ?Sized + MaybeUninitProject, P: SmartPtr<Content = T::Target>> AssumeInit<T> for P {}
+
+pub trait UnsizedBoxClone: Sealed + SmartPtr
+where
+    Self::Content: UnsizedClone,
+{
+    fn clone_unsized(&self) -> Self;
+}
+
+impl<T: ?Sized + UnsizedClone> UnsizedBoxClone for Box<T> {
+    fn clone_unsized(&self) -> Self {
+        let (_, metadata) = (self.as_ref() as *const T).to_raw_parts();
+        unsafe { Self::new_unsized_with(metadata, |dest| self.as_ref().clone_to(dest)) }
+    }
 }
 
 #[cfg(test)]

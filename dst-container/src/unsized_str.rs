@@ -10,14 +10,10 @@ pub struct UnsizedStr<H> {
     pub str: str,
 }
 
-impl<H: Clone> Clone for Box<UnsizedStr<H>> {
-    fn clone(&self) -> Self {
-        unsafe {
-            Self::new_unsized_with(self.str.len(), |slice| {
-                slice.header.write(self.header.clone());
-                MaybeUninit::write_slice(&mut slice.str, self.str.as_bytes());
-            })
-        }
+impl<H: UnsizedClone> UnsizedClone for UnsizedStr<H> {
+    fn clone_to(&self, dest: &mut Self::Target) {
+        self.header.clone_to(&mut dest.header);
+        self.str.clone_to(&mut dest.str);
     }
 }
 

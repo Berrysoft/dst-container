@@ -6,6 +6,8 @@
 #![feature(ptr_metadata)]
 #![feature(slice_index_methods)]
 #![feature(slice_ptr_get)]
+#![feature(specialization)]
+#![allow(incomplete_features)]
 #![warn(missing_docs)]
 
 use std::{mem::MaybeUninit, ptr::Pointee};
@@ -42,4 +44,41 @@ impl<T> MaybeUninitProject for [T] {
 
 impl MaybeUninitProject for str {
     type Target = [MaybeUninit<u8>];
+}
+
+/// Provide the ability to duplicate a DST object.
+pub trait UnsizedClone: MaybeUninitProject {
+    /// Clone the current type to maybe-uninit target.
+    fn clone_to(&self, dest: &mut Self::Target);
+}
+
+impl<T: Clone> UnsizedClone for T {
+    fn clone_to(&self, dest: &mut Self::Target) {
+        dest.write(self.clone());
+    }
+}
+
+impl<T: UnsizedClone> UnsizedClone for [T] {
+    default fn clone_to(&self, _dest: &mut Self::Target) {
+        // All Sized Clone implements UnsizedClone.
+        unreachable!()
+    }
+}
+
+impl<T: Clone> UnsizedClone for [T] {
+    default fn clone_to(&self, dest: &mut Self::Target) {
+        MaybeUninit::write_slice_cloned(dest, self);
+    }
+}
+
+impl<T: Copy> UnsizedClone for [T] {
+    fn clone_to(&self, dest: &mut Self::Target) {
+        MaybeUninit::write_slice(dest, self);
+    }
+}
+
+impl UnsizedClone for str {
+    fn clone_to(&self, dest: &mut Self::Target) {
+        MaybeUninit::write_slice(dest, self.as_bytes());
+    }
 }

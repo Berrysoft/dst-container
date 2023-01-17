@@ -10,20 +10,16 @@ pub struct UnsizedSlice<H, T> {
     pub slice: [T],
 }
 
-impl<H: Clone, T: Clone> Clone for Box<UnsizedSlice<H, T>> {
-    fn clone(&self) -> Self {
-        unsafe {
-            Self::new_unsized_with(self.slice.len(), |slice| {
-                slice.header.write(self.header.clone());
-                MaybeUninit::write_slice_cloned(&mut slice.slice, &self.slice);
-            })
-        }
+impl<H: UnsizedClone, T: UnsizedClone> UnsizedClone for UnsizedSlice<H, T> {
+    fn clone_to(&self, dest: &mut Self::Target) {
+        self.header.clone_to(&mut dest.header);
+        self.slice.clone_to(&mut dest.slice);
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::*;
+    use crate::{smart_ptr::UnsizedBoxClone, *};
     use std::sync::Arc;
 
     #[test]
@@ -58,7 +54,7 @@ mod test {
         };
         assert_eq!(Arc::strong_count(&data), 4);
 
-        let b_clone = b.clone();
+        let b_clone = b.clone_unsized();
         assert_eq!(Arc::strong_count(&data), 7);
 
         drop(b_clone);
