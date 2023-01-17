@@ -10,6 +10,7 @@
 
 use std::{mem::MaybeUninit, ptr::Pointee};
 
+#[doc(no_inline)]
 pub use dst_container_derive::MaybeUninitProject;
 
 mod smart_ptr;

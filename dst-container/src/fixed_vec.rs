@@ -1,6 +1,7 @@
 use crate::*;
 use std::{
     alloc::{handle_alloc_error, AllocError, Allocator, Global, Layout},
+    iter::FusedIterator,
     mem::forget,
     ops::{Index, IndexMut, RangeFull},
     ptr::{drop_in_place, NonNull, Pointee},
@@ -345,10 +346,9 @@ impl<T: ?Sized> FixedVec<T> {
     /// This is a low-level operation that maintains none of the normal
     /// invariants of the type. Normally changing the length of a vector
     /// is done using one of the safe operations instead, such as
-    /// [`truncate`], [`resize`], [`extend`], or [`clear`].
+    /// [`truncate`], [`extend`], or [`clear`].
     ///
     /// [`truncate`]: FixedVec::truncate
-    /// [`resize`]: FixedVec::resize
     /// [`extend`]: Extend::extend
     /// [`clear`]: FixedVec::clear
     ///
@@ -688,6 +688,7 @@ impl<T: ?Sized> FixedVec<T> {
     /// assert_eq!(iterator.next(), Some(&[2, 2][..]));
     /// assert_eq!(iterator.next(), None);
     /// ```
+    #[inline]
     pub fn iter(&self) -> FixedVecIter<T> {
         FixedVecIter::new(self)
     }
@@ -722,8 +723,64 @@ impl<T: ?Sized> FixedVec<T> {
     /// assert_eq!(iterator.next(), Some(&[4, 4][..]));
     /// assert_eq!(iterator.next(), None);
     /// ```
+    #[inline]
     pub fn iter_mut(&mut self) -> FixedVecIterMut<T> {
         FixedVecIterMut::new(self)
+    }
+
+    /// Returns a reference to an element or subslice depending on the type of
+    /// index.
+    ///
+    /// - If given a position, returns a reference to the element at that
+    ///   position or `None` if out of bounds.
+    /// - If given a range, returns the subslice corresponding to that range,
+    ///   or `None` if out of bounds.
+    #[inline]
+    pub fn get<I: SliceIndex<Self>>(&self, index: I) -> Option<&I::Output> {
+        index.get(self)
+    }
+
+    /// Returns a mutable reference to an element or subslice depending on the
+    /// type of index (see [`get`]) or `None` if the index is out of bounds.
+    ///
+    /// [`get`]: FixedVec::get
+    #[inline]
+    pub fn get_mut<I: SliceIndex<Self>>(&mut self, index: I) -> Option<&mut I::Output> {
+        index.get_mut(self)
+    }
+
+    /// Returns a reference to an element or subslice, without doing bounds
+    /// checking.
+    ///
+    /// For a safe alternative see [`get`].
+    ///
+    /// # Safety
+    ///
+    /// Calling this method with an out-of-bounds index is *[undefined behavior]*
+    /// even if the resulting reference is not used.
+    ///
+    /// [`get`]: FixedVec::get
+    /// [undefined behavior]: https://doc.rust-lang.org/reference/behavior-considered-undefined.html
+    #[inline]
+    pub unsafe fn get_unchecked<I: SliceIndex<Self>>(&self, index: I) -> &I::Output {
+        &*index.get_unchecked(self)
+    }
+
+    /// Returns a mutable reference to an element or subslice, without doing
+    /// bounds checking.
+    ///
+    /// For a safe alternative see [`get_mut`].
+    ///
+    /// # Safety
+    ///
+    /// Calling this method with an out-of-bounds index is *[undefined behavior]*
+    /// even if the resulting reference is not used.
+    ///
+    /// [`get_mut`]: FixedVec::get_mut
+    /// [undefined behavior]: https://doc.rust-lang.org/reference/behavior-considered-undefined.html
+    #[inline]
+    pub unsafe fn get_unchecked_mut<I: SliceIndex<Self>>(&mut self, index: I) -> &mut I::Output {
+        &mut *index.get_unchecked_mut(self)
     }
 }
 
@@ -827,14 +884,50 @@ impl<'a, T: ?Sized> Iterator for FixedVecIter<'a, T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.index < self.vec.len() {
-            let res = Some(unsafe { self.vec.raw(self.index) });
+            let res = Some(unsafe { self.vec.get_unchecked(self.index) });
             self.index += 1;
             res
         } else {
             None
         }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.vec.len();
+        (len, Some(len))
+    }
+
+    fn count(self) -> usize {
+        self.vec.len()
+    }
+
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        self.vec.get(n)
+    }
 }
+
+impl<T: ?Sized> ExactSizeIterator for FixedVecIter<'_, T> {}
+
+impl<'a, T: ?Sized> DoubleEndedIterator for FixedVecIter<'a, T> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.index > 0 {
+            self.index -= 1;
+            Some(unsafe { self.vec.get_unchecked(self.index) })
+        } else {
+            None
+        }
+    }
+
+    fn nth_back(&mut self, n: usize) -> Option<Self::Item> {
+        if n >= self.vec.len() {
+            None
+        } else {
+            Some(unsafe { self.vec.get_unchecked(self.vec.len() - n - 1) })
+        }
+    }
+}
+
+impl<T: ?Sized> FusedIterator for FixedVecIter<'_, T> {}
 
 impl<'a, T: ?Sized> IntoIterator for &'a FixedVec<T> {
     type Item = &'a T;
@@ -862,14 +955,50 @@ impl<'a, T: ?Sized> Iterator for FixedVecIterMut<'a, T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.index < self.vec.len() {
-            let res = Some(unsafe { self.vec.raw_mut(self.index) });
+            let res = Some(unsafe { self.vec.get_unchecked_mut(self.index) });
             self.index += 1;
             res.map(|p| unsafe { &mut *(p as *mut T) })
         } else {
             None
         }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.vec.len();
+        (len, Some(len))
+    }
+
+    fn count(self) -> usize {
+        self.vec.len()
+    }
+
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        self.vec.get_mut(n).map(|p| unsafe { &mut *(p as *mut T) })
+    }
 }
+
+impl<T: ?Sized> ExactSizeIterator for FixedVecIterMut<'_, T> {}
+
+impl<'a, T: ?Sized> DoubleEndedIterator for FixedVecIterMut<'a, T> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.index > 0 {
+            self.index -= 1;
+            Some(unsafe { &mut *(self.vec.get_unchecked_mut(self.index) as *mut T) })
+        } else {
+            None
+        }
+    }
+
+    fn nth_back(&mut self, n: usize) -> Option<Self::Item> {
+        if n >= self.vec.len() {
+            None
+        } else {
+            Some(unsafe { &mut *(self.vec.get_unchecked_mut(self.vec.len() - n - 1) as *mut T) })
+        }
+    }
+}
+
+impl<T: ?Sized> FusedIterator for FixedVecIterMut<'_, T> {}
 
 impl<'a, T: ?Sized> IntoIterator for &'a mut FixedVec<T> {
     type Item = &'a mut T;
