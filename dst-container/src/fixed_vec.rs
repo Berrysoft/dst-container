@@ -7,6 +7,7 @@ use std::{
     slice::SliceIndex,
 };
 
+#[derive(Clone, Copy)]
 struct FixedAlloc<T: ?Sized> {
     alloc: Global,
     metadata: <T as Pointee>::Metadata,
@@ -661,6 +662,69 @@ impl<T: ?Sized> FixedVec<T> {
     pub fn is_empty(&self) -> bool {
         self.0.len() == 0
     }
+
+    /// Returns an iterator over the vector.
+    ///
+    /// The iterator yields all items from start to end.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// #![feature(maybe_uninit_write_slice)]
+    /// # use dst_container::*;
+    /// # use std::mem::MaybeUninit;
+    ///
+    /// let mut vec = FixedVec::<[i32]>::new(2);
+    /// unsafe {
+    ///     vec.push_with(|slice| { MaybeUninit::write_slice(slice, &[0, 0]); });
+    ///     vec.push_with(|slice| { MaybeUninit::write_slice(slice, &[1, 1]); });
+    ///     vec.push_with(|slice| { MaybeUninit::write_slice(slice, &[2, 2]); });
+    /// }
+    ///
+    /// let mut iterator = vec.iter();
+    ///
+    /// assert_eq!(iterator.next(), Some(&[0, 0][..]));
+    /// assert_eq!(iterator.next(), Some(&[1, 1][..]));
+    /// assert_eq!(iterator.next(), Some(&[2, 2][..]));
+    /// assert_eq!(iterator.next(), None);
+    /// ```
+    pub fn iter(&self) -> FixedVecIter<T> {
+        FixedVecIter::new(self)
+    }
+
+    /// Returns an iterator that allows modifying each value.
+    ///
+    /// The iterator yields all items from start to end.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// #![feature(maybe_uninit_write_slice)]
+    /// # use dst_container::*;
+    /// # use std::mem::MaybeUninit;
+    ///
+    /// let mut vec = FixedVec::<[i32]>::new(2);
+    /// unsafe {
+    ///     vec.push_with(|slice| { MaybeUninit::write_slice(slice, &[0, 0]); });
+    ///     vec.push_with(|slice| { MaybeUninit::write_slice(slice, &[1, 1]); });
+    ///     vec.push_with(|slice| { MaybeUninit::write_slice(slice, &[2, 2]); });
+    /// }
+    ///
+    /// for elem in vec.iter_mut() {
+    ///     elem[0] += 2;
+    ///     elem[1] *= 2;
+    /// }
+    ///
+    /// let mut iterator = vec.iter();
+    ///
+    /// assert_eq!(iterator.next(), Some(&[2, 0][..]));
+    /// assert_eq!(iterator.next(), Some(&[3, 2][..]));
+    /// assert_eq!(iterator.next(), Some(&[4, 4][..]));
+    /// assert_eq!(iterator.next(), None);
+    /// ```
+    pub fn iter_mut(&mut self) -> FixedVecIterMut<T> {
+        FixedVecIterMut::new(self)
+    }
 }
 
 impl<T: ?Sized> Drop for FixedVec<T> {
@@ -747,6 +811,119 @@ unsafe impl<T: ?Sized> SliceIndex<FixedVec<T>> for RangeFull {
     }
 }
 
+pub struct FixedVecIter<'a, T: ?Sized> {
+    vec: &'a FixedVec<T>,
+    index: usize,
+}
+
+impl<'a, T: ?Sized> FixedVecIter<'a, T> {
+    pub(crate) fn new(vec: &'a FixedVec<T>) -> Self {
+        Self { vec, index: 0 }
+    }
+}
+
+impl<'a, T: ?Sized> Iterator for FixedVecIter<'a, T> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < self.vec.len() {
+            let res = Some(unsafe { self.vec.raw(self.index) });
+            self.index += 1;
+            res
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a, T: ?Sized> IntoIterator for &'a FixedVec<T> {
+    type Item = &'a T;
+
+    type IntoIter = FixedVecIter<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+pub struct FixedVecIterMut<'a, T: ?Sized> {
+    vec: &'a mut FixedVec<T>,
+    index: usize,
+}
+
+impl<'a, T: ?Sized> FixedVecIterMut<'a, T> {
+    pub(crate) fn new(vec: &'a mut FixedVec<T>) -> Self {
+        Self { vec, index: 0 }
+    }
+}
+
+impl<'a, T: ?Sized> Iterator for FixedVecIterMut<'a, T> {
+    type Item = &'a mut T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < self.vec.len() {
+            let res = Some(unsafe { self.vec.raw_mut(self.index) });
+            self.index += 1;
+            res.map(|p| unsafe { &mut *(p as *mut T) })
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a, T: ?Sized> IntoIterator for &'a mut FixedVec<T> {
+    type Item = &'a mut T;
+
+    type IntoIter = FixedVecIterMut<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter_mut()
+    }
+}
+
+impl<T: Clone> Clone for FixedVec<T> {
+    fn clone(&self) -> Self {
+        struct DropGuard<'a, T> {
+            vec: &'a mut FixedVec<T>,
+            num_init: usize,
+        }
+        impl<'a, T> Drop for DropGuard<'a, T> {
+            #[inline]
+            fn drop(&mut self) {
+                // SAFETY:
+                // items were marked initialized in the loop below
+                unsafe {
+                    self.vec.set_len(self.num_init);
+                }
+            }
+        }
+        let mut vec = FixedVec::<T>::with_capacity((), self.len());
+        let mut guard = DropGuard {
+            vec: &mut vec,
+            num_init: 0,
+        };
+        let slots = unsafe {
+            std::slice::from_raw_parts_mut(
+                guard.vec.as_mut_ptr() as *mut MaybeUninit<T>,
+                self.len(),
+            )
+        };
+        // .take(slots.len()) is necessary for LLVM to remove bounds checks
+        // and has better codegen than zip.
+        for (i, b) in self.iter().enumerate().take(slots.len()) {
+            guard.num_init = i;
+            slots[i].write(b.clone());
+        }
+        core::mem::forget(guard);
+        // SAFETY:
+        // the vec was allocated and initialized above to at least this length.
+        unsafe {
+            vec.set_len(self.len());
+        }
+        vec
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::*;
@@ -797,6 +974,18 @@ mod test {
 
         drop(vec);
         assert_eq!(Arc::strong_count(&data), 1);
+    }
+
+    #[test]
+    fn clone() {
+        let mut vec = FixedVec::<i32>::new(());
+        vec.push(Box::new(1));
+        vec.push(Box::new(2));
+        vec.push(Box::new(3));
+        assert_eq!((vec[0], vec[1], vec[2]), (1, 2, 3));
+
+        let vec2 = vec.clone();
+        assert_eq!((vec2[0], vec2[1], vec2[2]), (1, 2, 3));
     }
 
     #[test]
