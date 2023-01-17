@@ -4,6 +4,8 @@
 #![feature(layout_for_ptr)]
 #![feature(maybe_uninit_write_slice)]
 #![feature(ptr_metadata)]
+#![feature(slice_index_methods)]
+#![feature(slice_ptr_get)]
 #![warn(missing_docs)]
 
 use std::{mem::MaybeUninit, ptr::Pointee};
