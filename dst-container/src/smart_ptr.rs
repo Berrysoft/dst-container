@@ -170,7 +170,7 @@ pub trait AssumeInit<T: ?Sized + MaybeUninitProject>:
     /// Converts to initialized smart pointer.
     /// # Safety
     /// See `MaybeUninit::assume_init`.
-    unsafe fn assume_init_unsized(self) -> RebindPtr<Self, T> {
+    unsafe fn assume_init(self) -> RebindPtr<Self, T> {
         self.rebind()
     }
 }
@@ -184,7 +184,7 @@ mod test {
 
     #[test]
     fn sized() {
-        let s: Box<u32> = unsafe { Box::<u32>::new_zeroed_unsized(()).assume_init_unsized() };
+        let s: Box<u32> = unsafe { Box::<u32>::new_zeroed_unsized(()).assume_init() };
         assert_eq!(s.as_ref(), &0);
     }
 
@@ -195,15 +195,15 @@ mod test {
     #[test]
     fn slice_wrapper() {
         let s: Box<SliceWrapper> =
-            unsafe { Box::<SliceWrapper>::new_zeroed_unsized(64).assume_init_unsized() };
+            unsafe { Box::<SliceWrapper>::new_zeroed_unsized(64).assume_init() };
         assert_eq!(&s.0, &[0u8; 64]);
 
         let s: Rc<SliceWrapper> =
-            unsafe { Rc::<SliceWrapper>::new_zeroed_unsized(64).assume_init_unsized() };
+            unsafe { Rc::<SliceWrapper>::new_zeroed_unsized(64).assume_init() };
         assert_eq!(&s.0, &[0u8; 64]);
 
         let s: Arc<SliceWrapper> =
-            unsafe { Arc::<SliceWrapper>::new_zeroed_unsized(64).assume_init_unsized() };
+            unsafe { Arc::<SliceWrapper>::new_zeroed_unsized(64).assume_init() };
         assert_eq!(&s.0, &[0u8; 64]);
     }
 }
@@ -219,7 +219,7 @@ mod bench {
     fn dst_uninit(b: &mut Bencher) {
         b.iter(|| unsafe {
             let b: Box<UnsizedSlice<(), u32>> =
-                Box::<UnsizedSlice<(), u32>>::new_uninit_unsized(SLICE_LEN).assume_init_unsized();
+                Box::<UnsizedSlice<(), u32>>::new_uninit_unsized(SLICE_LEN).assume_init();
             black_box(b)
         })
     }
@@ -238,7 +238,7 @@ mod bench {
     fn dst_zeroed(b: &mut Bencher) {
         b.iter(|| unsafe {
             let b: Box<UnsizedSlice<(), u32>> =
-                Box::<UnsizedSlice<(), u32>>::new_zeroed_unsized(SLICE_LEN).assume_init_unsized();
+                Box::<UnsizedSlice<(), u32>>::new_zeroed_unsized(SLICE_LEN).assume_init();
             black_box(b)
         })
     }

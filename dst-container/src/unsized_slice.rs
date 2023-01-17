@@ -30,7 +30,7 @@ mod test {
     #[test]
     fn zeroed() {
         let b: Box<UnsizedSlice<_, _>> =
-            unsafe { Box::<UnsizedSlice<u64, u128>>::new_zeroed_unsized(6).assume_init_unsized() };
+            unsafe { Box::<UnsizedSlice<u64, u128>>::new_zeroed_unsized(6).assume_init() };
         assert_eq!(b.header, 0);
         assert_eq!(b.slice, [0, 0, 0, 0, 0, 0]);
     }

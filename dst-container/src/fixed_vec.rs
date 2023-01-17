@@ -465,7 +465,7 @@ impl<T: ?Sized> FixedVec<T> {
     /// let mut vec = FixedVec::<[i32]>::new(2);
     /// unsafe {
     ///     vec.push_with(|slice| { MaybeUninit::write_slice(slice, &[1, 1]); });
-    ///     vec.insert(0, Box::<[i32]>::new_zeroed_unsized(2).assume_init_unsized());
+    ///     vec.insert(0, Box::<[i32]>::new_zeroed_unsized(2).assume_init());
     /// }
     /// assert_eq!(&vec[0], [0, 0]);
     /// assert_eq!(&vec[1], [1, 1]);
