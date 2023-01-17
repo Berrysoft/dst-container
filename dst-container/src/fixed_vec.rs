@@ -1010,6 +1010,14 @@ impl<'a, T: ?Sized> IntoIterator for &'a mut FixedVec<T> {
     }
 }
 
+impl<T: ?Sized> Extend<Box<T>> for FixedVec<T> {
+    fn extend<I: IntoIterator<Item = Box<T>>>(&mut self, iter: I) {
+        for item in iter {
+            self.push(item);
+        }
+    }
+}
+
 impl<T: Clone> Clone for FixedVec<T> {
     fn clone(&self) -> Self {
         struct DropGuard<'a, T> {
