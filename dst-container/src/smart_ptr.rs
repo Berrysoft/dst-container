@@ -221,3 +221,55 @@ mod test {
         assert_eq!(&s.0, &[0u8; 64]);
     }
 }
+
+#[cfg(test)]
+mod bench {
+    use crate::*;
+    use test::{black_box, Bencher};
+
+    const SLICE_LEN: usize = 10000;
+
+    #[bench]
+    fn dst_uninit(b: &mut Bencher) {
+        b.iter(|| unsafe {
+            let b: Box<UnsizedSlice<(), u32>> =
+                Box::<UnsizedSlice<(), u32>>::new_uninit_unsized(SLICE_LEN).assume_init_unsized();
+            black_box(b)
+        })
+    }
+
+    #[bench]
+    fn dst_uninit_write(b: &mut Bencher) {
+        b.iter(|| unsafe {
+            let b = Box::<UnsizedSlice<(), u32>>::new_unsized_with(SLICE_LEN, |slice| {
+                MaybeUninit::write_slice(&mut slice.slice, &[0; SLICE_LEN]);
+            });
+            black_box(b)
+        })
+    }
+
+    #[bench]
+    fn dst_zeroed(b: &mut Bencher) {
+        b.iter(|| unsafe {
+            let b: Box<UnsizedSlice<(), u32>> =
+                Box::<UnsizedSlice<(), u32>>::new_zeroed_unsized(SLICE_LEN).assume_init_unsized();
+            black_box(b)
+        })
+    }
+
+    #[bench]
+    fn box_from(b: &mut Bencher) {
+        b.iter(|| unsafe {
+            let b: Box<[u32]> = Box::new_zeroed_slice(SLICE_LEN).assume_init();
+            black_box(b)
+        })
+    }
+
+    #[bench]
+    fn vec_into(b: &mut Bencher) {
+        b.iter(|| {
+            let b = vec![0u32; SLICE_LEN].into_boxed_slice();
+            black_box(b)
+        })
+    }
+}

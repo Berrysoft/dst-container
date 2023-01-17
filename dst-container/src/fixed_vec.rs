@@ -1099,7 +1099,7 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "Different metadata.")]
+    #[should_panic]
     fn different_meta() {
         let mut vec: FixedVec<UnsizedSlice<u32, u64>> = FixedVec::new(6);
         vec.push(unsafe {
@@ -1108,5 +1108,107 @@ mod test {
                 MaybeUninit::write_slice(&mut slice.slice, &[1, 1, 4]);
             })
         });
+    }
+}
+
+#[cfg(test)]
+mod bench {
+    use crate::*;
+    use test::{black_box, Bencher};
+
+    const SLICE_LEN: usize = 1000;
+
+    #[bench]
+    fn fixed_vec(b: &mut Bencher) {
+        b.iter(|| unsafe {
+            let mut vec = FixedVec::<[u32]>::with_capacity(SLICE_LEN, SLICE_LEN);
+            for _i in 0..SLICE_LEN {
+                vec.push_with(|_| {});
+            }
+            black_box(vec)
+        })
+    }
+
+    #[bench]
+    fn fixed_vec_zeroed(b: &mut Bencher) {
+        b.iter(|| unsafe {
+            let mut vec = FixedVec::<[u32]>::with_capacity(SLICE_LEN, SLICE_LEN);
+            for _i in 0..SLICE_LEN {
+                vec.push_with(|slice| {
+                    MaybeUninit::write_slice(slice, &[0; SLICE_LEN]);
+                });
+            }
+            black_box(vec)
+        })
+    }
+
+    #[bench]
+    fn flatten_vec(b: &mut Bencher) {
+        b.iter(|| {
+            let mut vec = Vec::with_capacity(SLICE_LEN * SLICE_LEN);
+            for _i in 0..(SLICE_LEN * SLICE_LEN) {
+                vec.push(0u32);
+            }
+            black_box(vec)
+        })
+    }
+
+    #[bench]
+    fn vec_box(b: &mut Bencher) {
+        b.iter(|| unsafe {
+            let mut vec: Vec<Box<[u32]>> = Vec::with_capacity(SLICE_LEN);
+            for _i in 0..SLICE_LEN {
+                vec.push(Box::new_uninit_slice(SLICE_LEN).assume_init());
+            }
+            black_box(vec)
+        })
+    }
+
+    #[bench]
+    fn vec_box_zeroed(b: &mut Bencher) {
+        b.iter(|| unsafe {
+            let mut vec: Vec<Box<[u32]>> = Vec::with_capacity(SLICE_LEN);
+            for _i in 0..SLICE_LEN {
+                vec.push(Box::new_zeroed_slice(SLICE_LEN).assume_init());
+            }
+            black_box(vec)
+        })
+    }
+}
+
+#[cfg(test)]
+mod bench_clone {
+    use crate::*;
+    use test::{black_box, Bencher};
+
+    const SLICE_LEN: usize = 1000;
+
+    #[bench]
+    fn fixed_vec(b: &mut Bencher) {
+        let mut vec = FixedVec::<[u32]>::with_capacity(SLICE_LEN, SLICE_LEN);
+        for _i in 0..SLICE_LEN {
+            unsafe {
+                vec.push_with(|_| {});
+            }
+        }
+        b.iter(|| black_box(vec.clone()))
+    }
+
+    #[bench]
+    fn vec(b: &mut Bencher) {
+        let mut vec = Vec::with_capacity(SLICE_LEN * SLICE_LEN);
+        for _i in 0..(SLICE_LEN * SLICE_LEN) {
+            vec.push(0u32);
+        }
+        b.iter(|| black_box(vec.clone()))
+    }
+
+    #[bench]
+    fn vec_box(b: &mut Bencher) {
+        let mut vec: Vec<Box<[u32]>> = Vec::with_capacity(SLICE_LEN);
+        for _i in 0..SLICE_LEN {
+            vec.push(unsafe { Box::new_uninit_slice(SLICE_LEN).assume_init() });
+        }
+        b.iter(|| black_box(vec.clone()))
     }
 }

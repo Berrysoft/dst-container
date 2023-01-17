@@ -7,8 +7,12 @@
 #![feature(slice_index_methods)]
 #![feature(slice_ptr_get)]
 #![feature(specialization)]
+#![cfg_attr(test, feature(new_uninit, test))]
 #![allow(incomplete_features)]
 #![warn(missing_docs)]
+
+#[cfg(test)]
+extern crate test;
 
 use std::{mem::MaybeUninit, ptr::Pointee};
 
