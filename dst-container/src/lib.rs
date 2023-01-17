@@ -13,7 +13,7 @@
 use std::{mem::MaybeUninit, ptr::Pointee};
 
 #[doc(no_inline)]
-pub use dst_container_derive::MaybeUninitProject;
+pub use dst_container_derive::{MaybeUninitProject, UnsizedClone};
 
 mod smart_ptr;
 pub use smart_ptr::{AssumeInit, NewUninit, SmartPtr};

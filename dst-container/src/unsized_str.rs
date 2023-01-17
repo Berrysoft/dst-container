@@ -1,6 +1,6 @@
 use crate::*;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, MaybeUninitProject)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, MaybeUninitProject, UnsizedClone)]
 #[repr(C)]
 /// Represents a [`Sized`] header and an unsized [`str`].
 pub struct UnsizedStr<H> {
@@ -8,13 +8,6 @@ pub struct UnsizedStr<H> {
     pub header: H,
     /// The unsized [`str`].
     pub str: str,
-}
-
-impl<H: UnsizedClone> UnsizedClone for UnsizedStr<H> {
-    fn clone_to(&self, dest: &mut Self::Target) {
-        self.header.clone_to(&mut dest.header);
-        self.str.clone_to(&mut dest.str);
-    }
 }
 
 #[cfg(test)]
