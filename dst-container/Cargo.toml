@@ -2,6 +2,13 @@
 name = "dst-container"
 version = "0.1.0"
 edition = "2021"
+authors = ["Berrysoft <Strawberry_Str@hotmail.com"]
+categories = ["data-structures"]
+description = "Containers for DST objects."
+keywords = ["dst", "vec", "slice", "type"]
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/Berrysoft/dst-container"
 
 [dependencies]
-dst-container-derive = { path = "../dst-container-derive" }
+dst-container-derive = { path = "../dst-container-derive", version = "0.1" }
