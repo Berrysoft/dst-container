@@ -1,3 +1,4 @@
+use crate::*;
 use std::{
     alloc::{handle_alloc_error, AllocError, Allocator, Global, Layout},
     mem::forget,
@@ -189,6 +190,27 @@ impl<T: ?Sized> FixedVec<T> {
         }
     }
 
+    pub unsafe fn insert_with(&mut self, index: usize, f: impl FnOnce(&mut T::Target))
+    where
+        T: MaybeUninitProject,
+    {
+        self.reserve(1);
+        let (start, end) = self.start_end_index(index);
+        unsafe {
+            std::ptr::copy(
+                self.0.as_ptr().add(start),
+                self.0.as_mut_ptr().add(end),
+                self.len() - index,
+            );
+            let ptr = std::ptr::from_raw_parts_mut::<T::Target>(
+                self.0.as_mut_ptr().add(start) as *mut (),
+                self.metadata(),
+            );
+            f(&mut *ptr);
+            self.set_len(self.len() + 1);
+        }
+    }
+
     pub fn remove(&mut self, index: usize) -> Box<T> {
         unsafe {
             let b = self.copy_to_box(index);
@@ -207,6 +229,13 @@ impl<T: ?Sized> FixedVec<T> {
 
     pub fn push(&mut self, value: Box<T>) {
         self.insert(self.len(), value);
+    }
+
+    pub unsafe fn push_with(&mut self, f: impl FnOnce(&mut T::Target))
+    where
+        T: MaybeUninitProject,
+    {
+        self.insert_with(self.len(), f);
     }
 
     pub fn pop(&mut self) -> Option<Box<T>> {
@@ -323,18 +352,53 @@ unsafe impl<T: ?Sized> SliceIndex<FixedVec<T>> for RangeFull {
 #[cfg(test)]
 mod test {
     use crate::*;
+    use std::sync::Arc;
 
     #[test]
     fn basic() {
         let mut vec: FixedVec<UnsizedSlice<u32, u64>> = FixedVec::new(6);
+        assert_eq!(vec.len(), 0);
         vec.push(unsafe {
             Box::<UnsizedSlice<u32, u64>>::new_unsized_with(6, |slice| {
                 slice.header.write(114514);
                 MaybeUninit::write_slice(&mut slice.slice, &[1, 1, 4, 5, 1, 4]);
             })
         });
+        assert_eq!(vec.len(), 1);
         assert_eq!(&vec[0].header, &114514);
         assert_eq!(&vec[0].slice, &[1, 1, 4, 5, 1, 4]);
+    }
+
+    #[test]
+    fn in_place() {
+        let mut vec: FixedVec<UnsizedSlice<u32, u64>> = FixedVec::new(6);
+        assert_eq!(vec.len(), 0);
+        unsafe {
+            vec.push_with(|slice| {
+                slice.header.write(114514);
+                MaybeUninit::write_slice(&mut slice.slice, &[1, 1, 4, 5, 1, 4]);
+            })
+        };
+        assert_eq!(vec.len(), 1);
+        assert_eq!(&vec[0].header, &114514);
+        assert_eq!(&vec[0].slice, &[1, 1, 4, 5, 1, 4]);
+    }
+
+    #[test]
+    fn untrivial_drop() {
+        let data = Arc::new(());
+
+        let mut vec: FixedVec<UnsizedSlice<Arc<()>, Arc<()>>> = FixedVec::new(2);
+        unsafe {
+            vec.push_with(|slice| {
+                slice.header.write(data.clone());
+                MaybeUninit::write_slice_cloned(&mut slice.slice, &[data.clone(), data.clone()]);
+            });
+        }
+        assert_eq!(Arc::strong_count(&data), 4);
+
+        drop(vec);
+        assert_eq!(Arc::strong_count(&data), 1);
     }
 
     #[test]
