@@ -1018,13 +1018,13 @@ impl<T: ?Sized> Extend<Box<T>> for FixedVec<T> {
     }
 }
 
-impl<T: Clone> Clone for FixedVec<T> {
+impl<T: ?Sized + UnsizedClone> Clone for FixedVec<T> {
     fn clone(&self) -> Self {
-        struct DropGuard<'a, T> {
+        struct DropGuard<'a, T: ?Sized> {
             vec: &'a mut FixedVec<T>,
             num_init: usize,
         }
-        impl<'a, T> Drop for DropGuard<'a, T> {
+        impl<'a, T: ?Sized> Drop for DropGuard<'a, T> {
             #[inline]
             fn drop(&mut self) {
                 // SAFETY:
@@ -1034,24 +1034,20 @@ impl<T: Clone> Clone for FixedVec<T> {
                 }
             }
         }
-        let mut vec = FixedVec::<T>::with_capacity((), self.len());
+        let mut vec = FixedVec::<T>::with_capacity(self.metadata(), self.len());
         let mut guard = DropGuard {
             vec: &mut vec,
             num_init: 0,
         };
-        let slots = unsafe {
-            std::slice::from_raw_parts_mut(
-                guard.vec.as_mut_ptr() as *mut MaybeUninit<T>,
-                self.len(),
-            )
-        };
-        // .take(slots.len()) is necessary for LLVM to remove bounds checks
-        // and has better codegen than zip.
-        for (i, b) in self.iter().enumerate().take(slots.len()) {
+        for (i, b) in self.iter().enumerate() {
             guard.num_init = i;
-            slots[i].write(b.clone());
+            b.clone_to(unsafe {
+                let ptr = guard.vec.raw_mut(i) as *mut T;
+                let (ptr, metadata) = ptr.to_raw_parts();
+                &mut *std::ptr::from_raw_parts_mut(ptr, metadata)
+            });
         }
-        core::mem::forget(guard);
+        forget(guard);
         // SAFETY:
         // the vec was allocated and initialized above to at least this length.
         unsafe {
@@ -1115,14 +1111,18 @@ mod test {
 
     #[test]
     fn clone() {
-        let mut vec = FixedVec::<i32>::new(());
-        vec.push(Box::new(1));
-        vec.push(Box::new(2));
-        vec.push(Box::new(3));
-        assert_eq!((vec[0], vec[1], vec[2]), (1, 2, 3));
+        let mut vec = FixedVec::<[i32]>::new(2);
+        vec.push(Box::from([1, 1]));
+        vec.push(Box::from([2, 2]));
+        vec.push(Box::from([3, 3]));
+        assert_eq!(&vec[0], &[1, 1]);
+        assert_eq!(&vec[1], &[2, 2]);
+        assert_eq!(&vec[2], &[3, 3]);
 
         let vec2 = vec.clone();
-        assert_eq!((vec2[0], vec2[1], vec2[2]), (1, 2, 3));
+        assert_eq!(&vec2[0], &[1, 1]);
+        assert_eq!(&vec2[1], &[2, 2]);
+        assert_eq!(&vec2[2], &[3, 3]);
     }
 
     #[test]
