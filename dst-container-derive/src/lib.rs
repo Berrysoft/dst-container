@@ -177,7 +177,11 @@ pub fn derive_unsized_clone(input: TokenStream) -> TokenStream {
         _ => unimplemented!(),
     };
 
-    let where_clause = quote!(where #(#types: UnsizedClone,)*);
+    let where_clause = if types.is_empty() {
+        quote!()
+    } else {
+        quote!(where #(#types: UnsizedClone,)*)
+    };
     let clone_to_statement = idents
         .into_iter()
         .map(|ident| quote!(self.#ident.clone_to(&mut dest.#ident);))

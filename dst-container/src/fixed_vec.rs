@@ -520,6 +520,37 @@ impl<T: ?Sized> FixedVec<T> {
         });
     }
 
+    /// Inserts an element at position `index` within the vector, shifting all
+    /// elements after it to the right.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index > len`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use dst_container::*;
+    /// # use std::mem::MaybeUninit;
+    ///
+    /// let element0: Box<[i32]> = Box::from([0, 0]);
+    /// let element1: Box<[i32]> = Box::from([1, 1]);
+    ///
+    /// let mut vec = FixedVec::<[i32]>::new(2);
+    /// vec.push_clone(element1.as_ref());
+    /// vec.insert_clone(0, element0.as_ref());
+    /// assert_eq!(&vec[0], [0, 0]);
+    /// assert_eq!(&vec[1], [1, 1]);
+    /// ```
+    pub fn insert_clone(&mut self, index: usize, element: &T)
+    where
+        T: UnsizedClone,
+    {
+        unsafe {
+            self.insert_with(index, |dest| element.clone_to(dest));
+        }
+    }
+
     /// Removes and returns the element at position `index` within the vector,
     /// shifting all elements after it to the left.
     ///
@@ -591,6 +622,19 @@ impl<T: ?Sized> FixedVec<T> {
         T: MaybeUninitProject,
     {
         self.insert_with(self.len(), f);
+    }
+
+    /// Appends an element to the back of a collection.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the new capacity exceeds `isize::MAX` bytes.
+    #[inline]
+    pub fn push_clone(&mut self, value: &T)
+    where
+        T: UnsizedClone,
+    {
+        self.insert_clone(self.len(), value);
     }
 
     /// Removes the last element from a vector and returns it, or [`None`] if it
@@ -1068,17 +1112,25 @@ mod test {
     #[test]
     fn untrivial_drop() {
         let data = Arc::new(());
+        assert_eq!(Arc::strong_count(&data), 1);
 
-        let mut vec: FixedVec<UnsizedSlice<Arc<()>, Arc<()>>> = FixedVec::new(2);
-        unsafe {
-            vec.push_with(|slice| {
+        let b = unsafe {
+            Box::<UnsizedSlice<Arc<()>, Arc<()>>>::new_unsized_with(2, |slice| {
                 slice.header.write(data.clone());
                 MaybeUninit::write_slice_cloned(&mut slice.slice, &[data.clone(), data.clone()]);
-            });
-        }
+            })
+        };
         assert_eq!(Arc::strong_count(&data), 4);
 
+        let mut vec: FixedVec<UnsizedSlice<Arc<()>, Arc<()>>> = FixedVec::new(2);
+        vec.push_clone(&b);
+        assert_eq!(Arc::strong_count(&data), 7);
+        vec.push_clone(&b);
+        assert_eq!(Arc::strong_count(&data), 10);
+
         drop(vec);
+        assert_eq!(Arc::strong_count(&data), 4);
+        drop(b);
         assert_eq!(Arc::strong_count(&data), 1);
     }
 
