@@ -1,7 +1,7 @@
 use crate::*;
 use std::{
     alloc::{handle_alloc_error, AllocError, Allocator, Global, Layout},
-    ptr::{NonNull, Pointee},
+    ptr::NonNull,
     rc::Rc,
     sync::Arc,
 };
@@ -22,9 +22,9 @@ pub trait SmartPtr: Sized {
     /// Convert the smart pointer to another content type one.
     /// # Safety
     /// See [`std::mem::transmute`].
-    unsafe fn rebind<U: ?Sized>(self) -> Self::Rebind<U>
+    unsafe fn rebind<U>(self) -> Self::Rebind<U>
     where
-        U: Pointee<Metadata = <Self::Content as Pointee>::Metadata>;
+        U: Pointee<Metadata = <Self::Content as Pointee>::Metadata> + ?Sized;
 }
 
 impl<T: ?Sized> SmartPtr for Box<T> {
@@ -36,9 +36,9 @@ impl<T: ?Sized> SmartPtr for Box<T> {
         Self::from_raw(p)
     }
 
-    unsafe fn rebind<U: ?Sized>(self) -> Self::Rebind<U>
+    unsafe fn rebind<U>(self) -> Self::Rebind<U>
     where
-        U: Pointee<Metadata = <Self::Content as Pointee>::Metadata>,
+        U: Pointee<Metadata = <Self::Content as Pointee>::Metadata> + ?Sized,
     {
         let (ptr, metadata) = Box::into_raw(self).to_raw_parts();
         Box::from_raw(std::ptr::from_raw_parts_mut(ptr, metadata))
@@ -54,9 +54,9 @@ impl<T: ?Sized> SmartPtr for Rc<T> {
         Box::from_alloc(p).into()
     }
 
-    unsafe fn rebind<U: ?Sized>(self) -> Self::Rebind<U>
+    unsafe fn rebind<U>(self) -> Self::Rebind<U>
     where
-        U: Pointee<Metadata = <Self::Content as Pointee>::Metadata>,
+        U: Pointee<Metadata = <Self::Content as Pointee>::Metadata> + ?Sized,
     {
         let (ptr, metadata) = Rc::into_raw(self).to_raw_parts();
         Rc::from_raw(std::ptr::from_raw_parts(ptr, metadata))
@@ -72,9 +72,9 @@ impl<T: ?Sized> SmartPtr for Arc<T> {
         Box::from_alloc(p).into()
     }
 
-    unsafe fn rebind<U: ?Sized>(self) -> Self::Rebind<U>
+    unsafe fn rebind<U>(self) -> Self::Rebind<U>
     where
-        U: Pointee<Metadata = <Self::Content as Pointee>::Metadata>,
+        U: Pointee<Metadata = <Self::Content as Pointee>::Metadata> + ?Sized,
     {
         let (ptr, metadata) = Arc::into_raw(self).to_raw_parts();
         Arc::from_raw(std::ptr::from_raw_parts(ptr, metadata))
@@ -228,7 +228,7 @@ mod bench {
     fn dst_uninit_write(b: &mut Bencher) {
         b.iter(|| unsafe {
             let b = Box::<UnsizedSlice<(), u32>>::new_unsized_with(SLICE_LEN, |slice| {
-                MaybeUninit::write_slice(&mut slice.slice, &[0; SLICE_LEN]);
+                MaybeUninit::copy_from_slice(&mut slice.slice, &[0; SLICE_LEN]);
             });
             black_box(b)
         })

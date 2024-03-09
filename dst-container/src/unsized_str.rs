@@ -19,7 +19,7 @@ mod test {
         let b = unsafe {
             Box::<UnsizedStr<u32>>::new_unsized_with(5, |slice| {
                 slice.header.write(114514);
-                MaybeUninit::write_slice(&mut slice.str, "Hello".as_bytes());
+                MaybeUninit::copy_from_slice(&mut slice.str, "Hello".as_bytes());
             })
         };
 

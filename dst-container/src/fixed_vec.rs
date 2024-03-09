@@ -4,7 +4,7 @@ use std::{
     iter::FusedIterator,
     mem::forget,
     ops::{Index, IndexMut, RangeFull},
-    ptr::{drop_in_place, NonNull, Pointee},
+    ptr::{drop_in_place, NonNull},
     slice::SliceIndex,
 };
 
@@ -125,24 +125,22 @@ impl<T: ?Sized> FixedVec<T> {
     }
 
     #[inline]
-    fn start_end_index(&self, index: usize) -> (usize, usize) {
-        let start = index * self.item_size();
-        let end = start + self.item_size();
-        (start, end)
+    fn start_index(&self, index: usize) -> usize {
+        index * self.item_size()
     }
 
     #[inline]
     unsafe fn raw(&self, index: usize) -> &T {
-        let (start, end) = self.start_end_index(index);
-        let slice = self.0.get_unchecked(start..end);
-        &*std::ptr::from_raw_parts(slice.as_ptr() as *mut (), self.metadata())
+        let start = self.start_index(index);
+        let start_ptr = self.0.as_ptr().add(start);
+        &*std::ptr::from_raw_parts(start_ptr as *mut (), self.metadata())
     }
 
     #[inline]
     unsafe fn raw_mut(&mut self, index: usize) -> &mut T {
-        let (start, end) = self.start_end_index(index);
-        let slice = self.0.get_unchecked_mut(start..end);
-        &mut *std::ptr::from_raw_parts_mut(slice.as_mut_ptr() as *mut (), self.metadata())
+        let start = self.start_index(index);
+        let start_ptr = self.0.as_mut_ptr().add(start);
+        &mut *std::ptr::from_raw_parts_mut(start_ptr as *mut (), self.metadata())
     }
 
     /// Returns the total number of elements the vector can hold without
@@ -429,13 +427,13 @@ impl<T: ?Sized> FixedVec<T> {
     #[allow(clippy::comparison_chain)]
     unsafe fn insert_raw(&mut self, index: usize, f: impl FnOnce(*mut u8)) {
         self.reserve(1);
-        let (start, end) = self.start_end_index(index);
+        let start = self.start_index(index);
         let len = self.len();
         unsafe {
             if index < len {
                 std::ptr::copy(
                     self.0.as_ptr().add(start),
-                    self.0.as_mut_ptr().add(end),
+                    self.0.as_mut_ptr().add(start + self.item_size()),
                     (len - index) * self.item_size(),
                 );
             } else if index == len {
@@ -464,7 +462,7 @@ impl<T: ?Sized> FixedVec<T> {
     ///
     /// let mut vec = FixedVec::<[i32]>::new(2);
     /// unsafe {
-    ///     vec.push_with(|slice| { MaybeUninit::write_slice(slice, &[1, 1]); });
+    ///     vec.push_with(|slice| { MaybeUninit::copy_from_slice(slice, &[1, 1]); });
     ///     vec.insert(0, Box::<[i32]>::new_zeroed_unsized(2).assume_init());
     /// }
     /// assert_eq!(&vec[0], [0, 0]);
@@ -478,7 +476,7 @@ impl<T: ?Sized> FixedVec<T> {
         let item_size = self.item_size();
         unsafe {
             self.insert_raw(index, |dest| {
-                std::ptr::copy_nonoverlapping(ptr as *const u8, dest as *mut u8, item_size);
+                std::ptr::copy_nonoverlapping(ptr as *const u8, dest, item_size);
             });
         }
         forget(element);
@@ -503,8 +501,8 @@ impl<T: ?Sized> FixedVec<T> {
     ///
     /// let mut vec = FixedVec::<[i32]>::new(2);
     /// unsafe {
-    ///     vec.push_with(|slice| { MaybeUninit::write_slice(slice, &[1, 1]); });
-    ///     vec.insert_with(0, |slice| { MaybeUninit::write_slice(slice, &[0, 0]); });
+    ///     vec.push_with(|slice| { MaybeUninit::copy_from_slice(slice, &[1, 1]); });
+    ///     vec.insert_with(0, |slice| { MaybeUninit::copy_from_slice(slice, &[0, 0]); });
     /// }
     /// assert_eq!(&vec[0], [0, 0]);
     /// assert_eq!(&vec[1], [1, 1]);
@@ -567,8 +565,8 @@ impl<T: ?Sized> FixedVec<T> {
     ///
     /// let mut vec = FixedVec::<[i32]>::new(2);
     /// unsafe {
-    ///     vec.push_with(|slice| { MaybeUninit::write_slice(slice, &[0, 0]); });
-    ///     vec.push_with(|slice| { MaybeUninit::write_slice(slice, &[1, 1]); });
+    ///     vec.push_with(|slice| { MaybeUninit::copy_from_slice(slice, &[0, 0]); });
+    ///     vec.push_with(|slice| { MaybeUninit::copy_from_slice(slice, &[1, 1]); });
     /// }
     /// assert_eq!(vec.remove(0).as_ref(), &[0, 0]);
     /// assert_eq!(&vec[0], &[1, 1]);
@@ -578,14 +576,14 @@ impl<T: ?Sized> FixedVec<T> {
         if index >= len {
             panic!("removal index (is {index}) should be < len (is {len})");
         }
-        let (start, end) = self.start_end_index(index);
+        let start = self.start_index(index);
         unsafe {
             let b;
             {
                 b = self.copy_to_box(index);
 
                 std::ptr::copy(
-                    self.0.as_ptr().add(end),
+                    self.0.as_ptr().add(start + self.item_size()),
                     self.0.as_mut_ptr().add(start),
                     (len - index - 1) * self.item_size(),
                 );
@@ -720,9 +718,9 @@ impl<T: ?Sized> FixedVec<T> {
     ///
     /// let mut vec = FixedVec::<[i32]>::new(2);
     /// unsafe {
-    ///     vec.push_with(|slice| { MaybeUninit::write_slice(slice, &[0, 0]); });
-    ///     vec.push_with(|slice| { MaybeUninit::write_slice(slice, &[1, 1]); });
-    ///     vec.push_with(|slice| { MaybeUninit::write_slice(slice, &[2, 2]); });
+    ///     vec.push_with(|slice| { MaybeUninit::copy_from_slice(slice, &[0, 0]); });
+    ///     vec.push_with(|slice| { MaybeUninit::copy_from_slice(slice, &[1, 1]); });
+    ///     vec.push_with(|slice| { MaybeUninit::copy_from_slice(slice, &[2, 2]); });
     /// }
     ///
     /// let mut iterator = vec.iter();
@@ -750,9 +748,9 @@ impl<T: ?Sized> FixedVec<T> {
     ///
     /// let mut vec = FixedVec::<[i32]>::new(2);
     /// unsafe {
-    ///     vec.push_with(|slice| { MaybeUninit::write_slice(slice, &[0, 0]); });
-    ///     vec.push_with(|slice| { MaybeUninit::write_slice(slice, &[1, 1]); });
-    ///     vec.push_with(|slice| { MaybeUninit::write_slice(slice, &[2, 2]); });
+    ///     vec.push_with(|slice| { MaybeUninit::copy_from_slice(slice, &[0, 0]); });
+    ///     vec.push_with(|slice| { MaybeUninit::copy_from_slice(slice, &[1, 1]); });
+    ///     vec.push_with(|slice| { MaybeUninit::copy_from_slice(slice, &[2, 2]); });
     /// }
     ///
     /// for elem in vec.iter_mut() {
@@ -1086,7 +1084,7 @@ mod test {
         vec.push(unsafe {
             Box::<UnsizedSlice<u32, u64>>::new_unsized_with(6, |slice| {
                 slice.header.write(114514);
-                MaybeUninit::write_slice(&mut slice.slice, &[1, 1, 4, 5, 1, 4]);
+                MaybeUninit::copy_from_slice(&mut slice.slice, &[1, 1, 4, 5, 1, 4]);
             })
         });
         assert_eq!(vec.len(), 1);
@@ -1101,7 +1099,7 @@ mod test {
         unsafe {
             vec.push_with(|slice| {
                 slice.header.write(114514);
-                MaybeUninit::write_slice(&mut slice.slice, &[1, 1, 4, 5, 1, 4]);
+                MaybeUninit::copy_from_slice(&mut slice.slice, &[1, 1, 4, 5, 1, 4]);
             })
         };
         assert_eq!(vec.len(), 1);
@@ -1117,7 +1115,7 @@ mod test {
         let b = unsafe {
             Box::<UnsizedSlice<Arc<()>, Arc<()>>>::new_unsized_with(2, |slice| {
                 slice.header.write(data.clone());
-                MaybeUninit::write_slice_cloned(&mut slice.slice, &[data.clone(), data.clone()]);
+                MaybeUninit::clone_from_slice(&mut slice.slice, &[data.clone(), data.clone()]);
             })
         };
         assert_eq!(Arc::strong_count(&data), 4);
@@ -1157,7 +1155,7 @@ mod test {
         vec.push(unsafe {
             Box::<UnsizedSlice<u32, u64>>::new_unsized_with(3, |slice| {
                 slice.header.write(114514);
-                MaybeUninit::write_slice(&mut slice.slice, &[1, 1, 4]);
+                MaybeUninit::copy_from_slice(&mut slice.slice, &[1, 1, 4]);
             })
         });
     }
@@ -1187,7 +1185,7 @@ mod bench {
             let mut vec = FixedVec::<[u32]>::with_capacity(SLICE_LEN, SLICE_LEN);
             for _i in 0..SLICE_LEN {
                 vec.push_with(|slice| {
-                    MaybeUninit::write_slice(slice, &[0; SLICE_LEN]);
+                    MaybeUninit::copy_from_slice(slice, &[0; SLICE_LEN]);
                 });
             }
             black_box(vec)

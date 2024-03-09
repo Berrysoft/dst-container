@@ -1,5 +1,4 @@
 [workspace]
-members = [
-    "dst-container",
-    "dst-container-derive",
-]
+members = ["dst-container", "dst-container-derive"]
+
+resolver = "2"
