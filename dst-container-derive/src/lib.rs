@@ -80,11 +80,18 @@ pub fn derive_maybe_uninit_project(input: TokenStream) -> TokenStream {
 
     let repr = attrs
         .iter()
-        .find(|attr| attr.path.get_ident().map_or(false, |ident| ident == "repr"))
+        .find(|attr| {
+            attr.path()
+                .get_ident()
+                .map_or(false, |ident| ident == "repr")
+        })
         .expect("Need #[repr(...)].");
-    let repr_content = repr.tokens.to_string();
-    if !matches!(repr_content.as_str(), "(C)" | "(packed)" | "(transparent)") {
-        panic!("Expected #[repr(C)], #[repr(packed)], #[repr(transparent)] only.");
+    let repr_content = repr.meta.require_list().unwrap().tokens.to_string();
+    if !matches!(repr_content.as_str(), "C" | "packed" | "transparent") {
+        panic!(
+            "Expected #[repr(C)], #[repr(packed)], #[repr(transparent)] only, get `{}`.",
+            repr_content
+        );
     }
 
     let project_data_declare = match data {

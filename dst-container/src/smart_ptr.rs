@@ -142,7 +142,7 @@ unsafe fn alloc_with_metadata_impl<T: ?Sized + MaybeUninitProject>(
     metadata: <T as Pointee>::Metadata,
     alloc: impl FnOnce(Layout) -> Result<NonNull<[u8]>, AllocError>,
 ) -> *mut T::Target {
-    let null_ptr: *mut T = std::ptr::from_raw_parts_mut(std::ptr::null_mut(), metadata);
+    let null_ptr: *mut T = std::ptr::from_raw_parts_mut(std::ptr::null_mut::<()>(), metadata);
     let layout = Layout::for_value_raw(null_ptr);
     if let Ok(ptr) = alloc(layout) {
         std::ptr::from_raw_parts_mut(ptr.as_mut_ptr() as *mut (), metadata)

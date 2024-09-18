@@ -7,7 +7,7 @@
 #![feature(slice_index_methods)]
 #![feature(slice_ptr_get)]
 #![feature(specialization)]
-#![cfg_attr(test, feature(new_uninit, test))]
+#![cfg_attr(test, feature(new_zeroed_alloc, test))]
 #![allow(incomplete_features)]
 #![warn(missing_docs)]
 

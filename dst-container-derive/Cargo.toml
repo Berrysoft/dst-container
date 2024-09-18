@@ -1,6 +1,6 @@
 [package]
 name = "dst-container-derive"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Berrysoft <Strawberry_Str@hotmail.com"]
 categories = ["data-structures"]
@@ -14,7 +14,7 @@ repository = "https://github.com/Berrysoft/dst-container"
 proc-macro = true
 
 [dependencies]
-syn = { version = "1.0", features = ["full"] }
+syn = { version = "2.0", features = ["full"] }
 quote = "1.0"
 proc-macro2 = "1.0"
-proc-macro-crate = "1.2"
+proc-macro-crate = "3.2"

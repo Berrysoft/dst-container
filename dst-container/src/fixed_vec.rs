@@ -30,7 +30,7 @@ impl<T: ?Sized> FixedAlloc<T> {
     #[inline]
     pub unsafe fn layout(&self) -> Layout {
         Layout::for_value_raw(std::ptr::from_raw_parts::<T>(
-            std::ptr::null(),
+            std::ptr::null::<()>(),
             self.metadata,
         ))
     }
