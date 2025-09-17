@@ -228,7 +228,7 @@ mod bench {
     fn dst_uninit_write(b: &mut Bencher) {
         b.iter(|| unsafe {
             let b = Box::<UnsizedSlice<(), u32>>::new_unsized_with(SLICE_LEN, |slice| {
-                MaybeUninit::copy_from_slice(&mut slice.slice, &[0; SLICE_LEN]);
+                slice.slice.write_copy_of_slice(&[0; SLICE_LEN]);
             });
             black_box(b)
         })

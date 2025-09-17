@@ -83,18 +83,18 @@ impl<T: UnsizedClone> UnsizedClone for [T] {
 
 impl<T: Clone> UnsizedClone for [T] {
     default fn clone_to(&self, dest: &mut Self::Target) {
-        MaybeUninit::clone_from_slice(dest, self);
+        dest.write_clone_of_slice(self);
     }
 }
 
 impl<T: Copy> UnsizedClone for [T] {
     fn clone_to(&self, dest: &mut Self::Target) {
-        MaybeUninit::copy_from_slice(dest, self);
+        dest.write_clone_of_slice(self);
     }
 }
 
 impl UnsizedClone for str {
     fn clone_to(&self, dest: &mut Self::Target) {
-        MaybeUninit::copy_from_slice(dest, self.as_bytes());
+        dest.write_clone_of_slice(self.as_bytes());
     }
 }

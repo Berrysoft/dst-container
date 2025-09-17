@@ -462,7 +462,7 @@ impl<T: ?Sized> FixedVec<T> {
     ///
     /// let mut vec = FixedVec::<[i32]>::new(2);
     /// unsafe {
-    ///     vec.push_with(|slice| { MaybeUninit::copy_from_slice(slice, &[1, 1]); });
+    ///     vec.push_with(|slice| { slice.write_copy_of_slice(&[1, 1]); });
     ///     vec.insert(0, Box::<[i32]>::new_zeroed_unsized(2).assume_init());
     /// }
     /// assert_eq!(&vec[0], [0, 0]);
@@ -501,8 +501,8 @@ impl<T: ?Sized> FixedVec<T> {
     ///
     /// let mut vec = FixedVec::<[i32]>::new(2);
     /// unsafe {
-    ///     vec.push_with(|slice| { MaybeUninit::copy_from_slice(slice, &[1, 1]); });
-    ///     vec.insert_with(0, |slice| { MaybeUninit::copy_from_slice(slice, &[0, 0]); });
+    ///     vec.push_with(|slice| { slice.write_copy_of_slice(&[1, 1]); });
+    ///     vec.insert_with(0, |slice| { slice.write_copy_of_slice(&[0, 0]); });
     /// }
     /// assert_eq!(&vec[0], [0, 0]);
     /// assert_eq!(&vec[1], [1, 1]);
@@ -565,8 +565,8 @@ impl<T: ?Sized> FixedVec<T> {
     ///
     /// let mut vec = FixedVec::<[i32]>::new(2);
     /// unsafe {
-    ///     vec.push_with(|slice| { MaybeUninit::copy_from_slice(slice, &[0, 0]); });
-    ///     vec.push_with(|slice| { MaybeUninit::copy_from_slice(slice, &[1, 1]); });
+    ///     vec.push_with(|slice| { slice.write_copy_of_slice(&[0, 0]); });
+    ///     vec.push_with(|slice| { slice.write_copy_of_slice(&[1, 1]); });
     /// }
     /// assert_eq!(vec.remove(0).as_ref(), &[0, 0]);
     /// assert_eq!(&vec[0], &[1, 1]);
@@ -718,9 +718,9 @@ impl<T: ?Sized> FixedVec<T> {
     ///
     /// let mut vec = FixedVec::<[i32]>::new(2);
     /// unsafe {
-    ///     vec.push_with(|slice| { MaybeUninit::copy_from_slice(slice, &[0, 0]); });
-    ///     vec.push_with(|slice| { MaybeUninit::copy_from_slice(slice, &[1, 1]); });
-    ///     vec.push_with(|slice| { MaybeUninit::copy_from_slice(slice, &[2, 2]); });
+    ///     vec.push_with(|slice| { slice.write_copy_of_slice(&[0, 0]); });
+    ///     vec.push_with(|slice| { slice.write_copy_of_slice(&[1, 1]); });
+    ///     vec.push_with(|slice| { slice.write_copy_of_slice(&[2, 2]); });
     /// }
     ///
     /// let mut iterator = vec.iter();
@@ -731,7 +731,7 @@ impl<T: ?Sized> FixedVec<T> {
     /// assert_eq!(iterator.next(), None);
     /// ```
     #[inline]
-    pub fn iter(&self) -> FixedVecIter<T> {
+    pub fn iter(&self) -> FixedVecIter<'_, T> {
         FixedVecIter::new(self)
     }
 
@@ -748,9 +748,9 @@ impl<T: ?Sized> FixedVec<T> {
     ///
     /// let mut vec = FixedVec::<[i32]>::new(2);
     /// unsafe {
-    ///     vec.push_with(|slice| { MaybeUninit::copy_from_slice(slice, &[0, 0]); });
-    ///     vec.push_with(|slice| { MaybeUninit::copy_from_slice(slice, &[1, 1]); });
-    ///     vec.push_with(|slice| { MaybeUninit::copy_from_slice(slice, &[2, 2]); });
+    ///     vec.push_with(|slice| { slice.write_copy_of_slice(&[0, 0]); });
+    ///     vec.push_with(|slice| { slice.write_copy_of_slice(&[1, 1]); });
+    ///     vec.push_with(|slice| { slice.write_copy_of_slice(&[2, 2]); });
     /// }
     ///
     /// for elem in vec.iter_mut() {
@@ -766,7 +766,7 @@ impl<T: ?Sized> FixedVec<T> {
     /// assert_eq!(iterator.next(), None);
     /// ```
     #[inline]
-    pub fn iter_mut(&mut self) -> FixedVecIterMut<T> {
+    pub fn iter_mut(&mut self) -> FixedVecIterMut<'_, T> {
         FixedVecIterMut::new(self)
     }
 
@@ -1084,7 +1084,7 @@ mod test {
         vec.push(unsafe {
             Box::<UnsizedSlice<u32, u64>>::new_unsized_with(6, |slice| {
                 slice.header.write(114514);
-                MaybeUninit::copy_from_slice(&mut slice.slice, &[1, 1, 4, 5, 1, 4]);
+                slice.slice.write_copy_of_slice(&[1, 1, 4, 5, 1, 4]);
             })
         });
         assert_eq!(vec.len(), 1);
@@ -1099,7 +1099,7 @@ mod test {
         unsafe {
             vec.push_with(|slice| {
                 slice.header.write(114514);
-                MaybeUninit::copy_from_slice(&mut slice.slice, &[1, 1, 4, 5, 1, 4]);
+                slice.slice.write_copy_of_slice(&[1, 1, 4, 5, 1, 4]);
             })
         };
         assert_eq!(vec.len(), 1);
@@ -1115,7 +1115,9 @@ mod test {
         let b = unsafe {
             Box::<UnsizedSlice<Arc<()>, Arc<()>>>::new_unsized_with(2, |slice| {
                 slice.header.write(data.clone());
-                MaybeUninit::clone_from_slice(&mut slice.slice, &[data.clone(), data.clone()]);
+                slice
+                    .slice
+                    .write_clone_of_slice(&[data.clone(), data.clone()]);
             })
         };
         assert_eq!(Arc::strong_count(&data), 4);
@@ -1155,7 +1157,7 @@ mod test {
         vec.push(unsafe {
             Box::<UnsizedSlice<u32, u64>>::new_unsized_with(3, |slice| {
                 slice.header.write(114514);
-                MaybeUninit::copy_from_slice(&mut slice.slice, &[1, 1, 4]);
+                slice.slice.write_copy_of_slice(&[1, 1, 4]);
             })
         });
     }
@@ -1185,7 +1187,7 @@ mod bench {
             let mut vec = FixedVec::<[u32]>::with_capacity(SLICE_LEN, SLICE_LEN);
             for _i in 0..SLICE_LEN {
                 vec.push_with(|slice| {
-                    MaybeUninit::copy_from_slice(slice, &[0; SLICE_LEN]);
+                    slice.write_copy_of_slice(&[0; SLICE_LEN]);
                 });
             }
             black_box(vec)

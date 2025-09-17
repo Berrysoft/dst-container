@@ -80,11 +80,7 @@ pub fn derive_maybe_uninit_project(input: TokenStream) -> TokenStream {
 
     let repr = attrs
         .iter()
-        .find(|attr| {
-            attr.path()
-                .get_ident()
-                .map_or(false, |ident| ident == "repr")
-        })
+        .find(|attr| attr.path().get_ident().is_some_and(|ident| ident == "repr"))
         .expect("Need #[repr(...)].");
     let repr_content = repr.meta.require_list().unwrap().tokens.to_string();
     if !matches!(repr_content.as_str(), "C" | "packed" | "transparent") {

@@ -20,7 +20,7 @@ mod test {
         let b = unsafe {
             Box::<UnsizedSlice<u32, u64>>::new_unsized_with(6, |slice| {
                 slice.header.write(114514u32);
-                MaybeUninit::copy_from_slice(&mut slice.slice, &[1u64, 1, 4, 5, 1, 4]);
+                slice.slice.write_copy_of_slice(&[1u64, 1, 4, 5, 1, 4]);
             })
         };
         assert_eq!(b.header, 114514);
@@ -42,7 +42,9 @@ mod test {
         let b = unsafe {
             Box::<UnsizedSlice<Arc<()>, Arc<()>>>::new_unsized_with(2, |slice| {
                 slice.header.write(data.clone());
-                MaybeUninit::clone_from_slice(&mut slice.slice, &[data.clone(), data.clone()]);
+                slice
+                    .slice
+                    .write_clone_of_slice(&[data.clone(), data.clone()]);
             })
         };
         assert_eq!(Arc::strong_count(&data), 4);
