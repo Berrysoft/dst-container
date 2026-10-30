@@ -1,13 +1,10 @@
 //! This is a crate providing functionalities creating DST instances.
 
-#![feature(allocator_api)]
-#![feature(layout_for_ptr)]
-#![feature(maybe_uninit_write_slice)]
+#![feature(allocator_ext)]
 #![feature(ptr_metadata)]
-#![feature(slice_index_methods)]
 #![feature(slice_ptr_get)]
 #![feature(specialization)]
-#![cfg_attr(test, feature(new_zeroed_alloc, test))]
+#![cfg_attr(test, feature(test))]
 #![allow(incomplete_features)]
 #![warn(missing_docs)]
 

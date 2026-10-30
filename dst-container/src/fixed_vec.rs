@@ -5,8 +5,26 @@ use std::{
     mem::forget,
     ops::{Index, IndexMut, RangeFull},
     ptr::{drop_in_place, NonNull},
-    slice::SliceIndex,
 };
+
+#[doc(hidden)]
+pub unsafe trait SliceIndex<T: ?Sized> {
+    type Output: ?Sized;
+
+    fn get(self, slice: &T) -> Option<&Self::Output>;
+
+    fn get_mut(self, slice: &mut T) -> Option<&mut Self::Output>;
+
+    unsafe fn get_unchecked(self, slice: *const T) -> *const Self::Output;
+
+    unsafe fn get_unchecked_mut(self, slice: *mut T) -> *mut Self::Output;
+
+    #[track_caller]
+    fn index(self, slice: &T) -> &Self::Output;
+
+    #[track_caller]
+    fn index_mut(self, slice: &mut T) -> &mut Self::Output;
+}
 
 #[derive(Clone, Copy)]
 struct FixedAlloc<T: ?Sized> {
